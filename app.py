@@ -2,39 +2,30 @@
 import streamlit as st
 import pandas as pd
 import joblib
+from sklearn.preprocessing import LabelEncoder
 
-# Load the saved Random Forest model
+# Load model and encoders
 model = joblib.load("random_forest_model.pkl")
+funding_encoder = joblib.load("funding_source_encoder.pkl")
+sector_encoder = joblib.load("mtef_sector_encoder.pkl")
+agency_encoder = joblib.load("implementing_agency_encoder.pkl")
 
 st.title("Project Success Predictor")
 
-# User inputs
-st.subheader("Enter Project Details:")
+# Input form
+st.subheader("Enter Project Details")
 cost = st.number_input("Total Project Cost (KES)", min_value=0)
 duration = st.number_input("Project Duration (Months)", min_value=0)
-funding_source = st.selectbox("Funding Source", ["Government of Kenya", "World Bank", "UNICEF", "USAID", "Unknown"])
-mtef_sector = st.selectbox("MTEF Sector", ["Education", "Health", "Infrastructure", "Governance", "Unknown"])
-agency = st.selectbox("Implementing Agency", ["Ministry of Education", "Ministry of Health", "NGO", "County Government", "Unknown"])
+funding_source = st.selectbox("Funding Source", funding_encoder.classes_)
+mtef_sector = st.selectbox("MTEF Sector", sector_encoder.classes_)
+agency = st.selectbox("Implementing Agency", agency_encoder.classes_)
 
-# Encoding (replicate label encoders from training)
+# Helper to encode safely
 def encode_label(val, encoder):
     try:
         return encoder.transform([val])[0]
     except:
-        return 0  # fallback to 'Unknown' or index 0
-# Encode categorical features
-label_encoders = {}
-for col in ['funding_source', 'mtef_sector', 'implementing_agency']:
-    le = LabelEncoder()
-    df_model[col] = le.fit_transform(df_model[col])
-    label_encoders[col] = le
-    # Save each encoder
-    joblib.dump(le, f"{col}_encoder.pkl")
-
-# Reload encoders if you saved them
-funding_encoder = joblib.load("funding_source_encoder.pkl")
-sector_encoder = joblib.load("mtef_sector_encoder.pkl")
-agency_encoder = joblib.load("implementing_agency_encoder.pkl")
+        return 0
 
 # Encode inputs
 encoded_input = pd.DataFrame([{
@@ -45,8 +36,9 @@ encoded_input = pd.DataFrame([{
     'implementing_agency': encode_label(agency, agency_encoder)
 }])
 
-# Predict button
+# Prediction
 if st.button("Predict Success"):
     prediction = model.predict(encoded_input)[0]
-    label = "Successful" if prediction == 1 else "Not Successful"
-    st.success(f"Prediction: {label}")
+    confidence = model.predict_proba(encoded_input)[0][prediction]
+    label = "Project is likely to succeed" if prediction == 1 else "Project may fail or stall"
+    st.success(f"{label} (Confidence: {confidence:.2%})")
